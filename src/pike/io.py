@@ -116,8 +116,8 @@ class _Open(object):
         :return: the durable handle timeout in seconds (or None if not durable)
         """
         ctx = self.durable_handle_v2_ctx
-        if ctx:
-            return ctx.durable_timeout
+        if ctx is not None:
+            return ctx.timeout
         elif self._previous_open is not None:
             return self._previous_open.durable_timeout
 
@@ -128,8 +128,8 @@ class _Open(object):
         :return: the durable handle flags (or None if not durable)
         """
         ctx = self.durable_handle_v2_ctx
-        if ctx:
-            return ctx.durable_flags
+        if ctx is not None:
+            return ctx.flags
         elif self._previous_open is not None:
             return self._previous_open.durable_flags
         return 0
