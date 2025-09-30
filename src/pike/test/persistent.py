@@ -47,11 +47,11 @@ class Persistent(test.PikeTest):
         self.lease_key = array.array("B", map(random.randint, [0] * 16, [255] * 16))
         self.channel, self.tree = self.tree_connect()
 
-    def create_persistent(self, prev_handle=0):
+    def create_persistent(self, prev_handle=0, path="persistent.txt"):
         """Helper to create a persistent handle, optionally reconnecting an old one"""
         handle = self.channel.create(
             self.tree,
-            "persistent.txt",
+            path,
             access=smb2.FILE_READ_DATA | smb2.FILE_WRITE_DATA | smb2.DELETE,
             share=SHARE_ALL,
             disposition=smb2.FILE_OPEN_IF,
@@ -84,6 +84,41 @@ class Persistent(test.PikeTest):
         self.assertEqual(handle2.lease.lease_state, LEASE_RWH)
 
         self.channel.close(handle2)
+
+    # Persistent flag not set in RECONNECT
+    # MS SMB Spec 3.3.5.9.12
+    # If Open.IsPersistent is TRUE and the SMB2_DHANDLE_FLAG_PERSISTENT bit is not set
+    # in the Flags field of the SMB2_CREATE_DURABLE_HANDLE_RECONNECT_V2 Create Context,
+    # the server SHOULD<347> fail the request with STATUS_OBJECT_NAME_NOT_FOUND. 
+    def test_reconnect_fails(self):
+        # Do a regular persistent open, drop connection, reconnect
+        path = "persistent_fails.txt"
+        handle1 = self.create_persistent(path=path)
+        self.channel.connection.close()
+        self.channel, self.tree = self.tree_connect()
+
+        with self.assert_error(pike.ntstatus.STATUS_OBJECT_NAME_NOT_FOUND):
+            # While sending this RECONNECT, do not set the Persistent flag
+            handle2 = self.channel.create(
+                self.tree,
+                path,
+                access=smb2.FILE_READ_DATA | smb2.FILE_WRITE_DATA | smb2.DELETE,
+                share=SHARE_ALL,
+                disposition=smb2.FILE_OPEN_IF,
+                options=smb2.FILE_DELETE_ON_CLOSE,
+                oplock_level=smb2.SMB2_OPLOCK_LEVEL_LEASE,
+                lease_key=self.lease_key,
+                lease_state=LEASE_RWH,
+                durable=handle1,
+                persistent=False,    # explicitly setting persistent flag to False
+            ).result()
+
+        # Clean up: Reconnect and close file (handle)
+        self.channel.connection.close()
+        self.channel, self.tree = self.tree_connect()
+        handle3 = self.create_persistent(prev_handle=handle1, path=path)
+        self.assertEqual(handle1.file_id, handle3.file_id)
+        self.channel.close(handle3)
 
     # Opening a file with a disconnected persistent handle fails with
     # STATUS_FILE_NOT_AVAILABLE
