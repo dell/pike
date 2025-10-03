@@ -19,14 +19,14 @@ from builtins import map
 import array
 import random
 import time
+import unittest
 
 import pike.model
 import pike.smb2
 import pike.test
 import pike.ntstatus
 
-MAX_TIMEOUT = 120
-DELAY_TIME = 30
+DELAY_TIME = 10
 
 # for buffer too small
 class InvalidNetworkResiliencyRequestRequest(pike.smb2.NetworkResiliencyRequestRequest):
@@ -239,7 +239,12 @@ class DurableHandleTest(pike.test.PikeTest):
 
         chan.connection.close()
 
-        self.assertTrue(DELAY_TIME < MAX_TIMEOUT)
+        # Convert durable timeout from milliseconds to seconds
+        timeout = handle1.durable_timeout/1000
+
+        if (DELAY_TIME >= timeout):
+             raise unittest.SkipTest("Durable timeout needs to be greater than 10 seconds. Skipping...")
+
         time.sleep(DELAY_TIME)
 
         chan2, tree2 = self.tree_connect()
@@ -247,9 +252,10 @@ class DurableHandleTest(pike.test.PikeTest):
         # Request reconnect before max timeout
         handle2 = self.create(chan2, tree2, durable=handle1)
         self.assertEqual(handle2.lease.lease_state, self.rwh)
+        self.assertEqual(handle1.durable_timeout, handle2.durable_timeout)
         chan2.connection.close()
 
-        time.sleep(MAX_TIMEOUT + DELAY_TIME)
+        time.sleep(timeout + DELAY_TIME)
 
         # Request reconnect after max timeout
         chan3, tree3 = self.tree_connect()
