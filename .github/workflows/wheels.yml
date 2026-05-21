@@ -14,8 +14,9 @@ jobs:
         run: python -m pip install cibuildwheel==2.11.3
       - name: Build wheels
         run: ./samba/dc.sh ./build_and_test_wheels.sh
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
+          name: wheels-py3
           path: ./wheelhouse/*.whl
 
   build_wheels_py27:
@@ -27,8 +28,9 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install python2.7
       - name: Build wheels
         run: ./samba/dc.sh ./build_and_test_wheels27.sh
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
+          name: wheels-py27
           path: ./wheelhouse/*.whl
 
   build_sdist:
@@ -40,8 +42,9 @@ jobs:
       - name: Build sdist
         run: pipx run build --sdist
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
+          name: sdist
           path: dist/*.tar.gz
 
   upload_pypi:
@@ -50,12 +53,13 @@ jobs:
     # upload to PyPI on every tag starting with 'v'
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     steps:
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
-          name: artifact
+          pattern: '*'
           path: dist
+          merge-multiple: true
 
-      - uses: pypa/gh-action-pypi-publish@v1.5.0
+      - uses: pypa/gh-action-pypi-publish@v1.14.0
         with:
           user: ${{ secrets.PYPI_USERNAME }}
           password: ${{ secrets.PYPI_PASSWORD }}
