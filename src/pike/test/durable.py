@@ -25,6 +25,8 @@ import pike.smb2
 import pike.test
 import pike.ntstatus
 
+MAX_TIMEOUT = 120
+DELAY_TIME = 30
 
 # for buffer too small
 class InvalidNetworkResiliencyRequestRequest(pike.smb2.NetworkResiliencyRequestRequest):
@@ -156,6 +158,33 @@ class DurableHandleTest(pike.test.PikeTest):
         # Reconnect should now fail
         with self.assert_error(pike.ntstatus.STATUS_OBJECT_NAME_NOT_FOUND):
             handle3 = self.create(chan3, tree3, durable=handle1)
+
+    def durable_timer_test(self, durable):
+        chan, tree = self.tree_connect()
+
+        handle1 = self.create(chan, tree, durable=durable)
+        self.assertEqual(handle1.lease.lease_state, self.rwh)
+        self.assertTrue(handle1.is_durable)
+
+        chan.connection.close()
+
+        self.assertTrue(DELAY_TIME < MAX_TIMEOUT)
+        time.sleep(DELAY_TIME)
+
+        chan2, tree2 = self.tree_connect()
+
+        # Request reconnect before max timeout
+        handle2 = self.create(chan2, tree2, durable=handle1)
+        self.assertEqual(handle2.lease.lease_state, self.rwh)
+        chan2.connection.close()
+
+        time.sleep(MAX_TIMEOUT + DELAY_TIME)
+
+        # Request reconnect after max timeout
+        chan3, tree3 = self.tree_connect()
+
+        with self.assert_error(pike.ntstatus.STATUS_OBJECT_NAME_NOT_FOUND):
+            self.create(chan3, tree3, durable=handle1)
 
     @pike.test.RequireDialect(pike.smb2.DIALECT_SMB2_1)
     def test_resiliency_reconnect_before_timeout(self, durable=True):
@@ -329,3 +358,7 @@ class DurableHandleTest(pike.test.PikeTest):
     @pike.test.RequireDialect(pike.smb2.DIALECT_SMB3_0)
     def test_durable_v2_invalidate(self):
         self.durable_invalidate_test(0)
+
+    @pike.test.RequireDialect(pike.smb2.DIALECT_SMB3_0)
+    def test_durable_v2_timer(self):
+        self.durable_timer_test(0)
